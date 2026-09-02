@@ -1,0 +1,5 @@
+[
+  {
+    "_comment": "Ground truth evaluation items dataset. Contains question, ground_truth, and source_file fields for RAG evaluation."
+  }
+]
