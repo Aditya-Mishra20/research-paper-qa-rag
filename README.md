@@ -23,11 +23,10 @@ A modular Python-based Retrieval-Augmented Generation (RAG) system for question-
 │       ├── golden_set.json     # Ground truth evaluation dataset
 │       └── run_evals.py        # RAG evaluation metrics script (e.g. Ragas / TruLens)
 ├── data/                       # Sample research papers (.pdf, .txt)
-├── notebooks/                  # Experimental Jupyter notebooks
 ├── .env.example                # Template for environment variables
 ├── .gitignore                  # Git exclusion rules
-├── pyproject.toml              # Project dependencies & tool configurations
-├── requirements.txt            # Package dependencies list
+├── pyproject.toml              # Single source of truth for dependencies
+├── uv.lock                     # Locked dependency versions
 └── README.md                   # Project documentation
 ```
 
@@ -46,10 +45,8 @@ source .venv/bin/activate  # On Linux/macOS
 ```
 
 ### 2. Install Dependencies
-Using `uv`:
+Using `uv` (`pyproject.toml` is the single source of truth):
 ```bash
-uv pip install -r requirements.txt
-# or via pyproject.toml
 uv sync
 ```
 

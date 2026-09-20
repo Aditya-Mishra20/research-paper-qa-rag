@@ -11,6 +11,8 @@ __pycache__/
 venv/
 env/
 ENV/
+.tmp/
+.uv-cache/
 build/
 develop-eggs/
 dist/
@@ -52,6 +54,7 @@ Thumbs.db
 data/*
 !data/.gitkeep
 !data/README.md
+chroma_db/
 *.db
 *.sqlite
 *.sqlite3
