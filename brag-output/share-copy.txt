@@ -1,0 +1,1 @@
+I stopped reading papers line-by-line — now I interrogate them. Upload a PDF or drop an arXiv ID, get answers where every claim cites its page. Free-tier RAG: FastAPI + Chroma + local MiniLM, zero embedding quota.

@@ -4,6 +4,18 @@ A modular Python-based Retrieval-Augmented Generation (RAG) system for question-
 
 ---
 
+## 🎬 Demo
+
+Upload a PDF or drop an arXiv ID, ask anything, get answers where every claim cites its page.
+
+<video src="brag-output/brag.mp4" poster="brag-output/brag.jpg" controls preload="metadata" width="100%"></video>
+
+> I stopped reading papers line-by-line — now I interrogate them. Upload a PDF or drop an arXiv ID, get answers where every claim cites its page. Free-tier RAG: FastAPI + Chroma + local MiniLM, zero embedding quota.
+
+Can't see the video above? [Watch `brag-output/brag.mp4`](brag-output/brag.mp4) · [Poster](brag-output/brag.jpg)
+
+---
+
 ## 📁 Project Structure
 
 ```text
@@ -87,3 +99,18 @@ python app/evaluation/run_evals.py
 
 - Ensure `.env` is never committed to Git (`.env` is included in `.gitignore`).
 - Keep API credentials secure.
+
+---
+
+## 📝 Decision Log
+
+- Clean PDF text in-memory: markdown-first extraction, de-hyphenate, strip repeated headers/footers.
+- Detect sections tolerantly (`#`, `1.`, `A.` prefixes, markdown bold/italic) and map to stable buckets.
+- Stratified eval pool: 25 pages spread across sections, skip `<500` chars, `References`, picture-text dumps.
+- Synthetic triplets per-PDF `(Q, GT, Source)`, cached by `sha256`, temp `0.0`, retry/backoff; auto-built on ingest (best-effort, quota-capped at 5).
+- Generation on `gemini-3-flash-preview`, judges + loop on local Ollama (`qwen2.5:1.5b`); plain `gemini-3-flash` ID verified nonexistent (404).
+- Token chunking (256/50, MiniLM tokenizer) with prev/next neighbor links; Chroma refreshed.
+- Test loop: recall 60%@k=3 → 100%@k=5 and @k=10; top_k=5 confirmed.
+- Judges: evidence-anchored rubric + cosine/citation guardrails; 1.5b judge unusable (all-zero vs 0.7+ cosine) — needs 7b judge.
+- Negatives: 1/4 pass; OOD answered from parametric memory — traced to citation-filter fallback keeping raw answers; score-gated refusal pending.
+- No reranker / Ragas yet: single-stage Chroma cosine only, eval runner still stub.

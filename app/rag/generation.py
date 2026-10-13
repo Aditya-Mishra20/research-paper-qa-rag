@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 
 
-GENERATION_MODEL = "gemini-2.5-flash-lite"
+GENERATION_MODEL = "gemini-3-flash-preview"
 GENERATE_URL = (
     "https://generativelanguage.googleapis.com"
     f"/v1beta/models/{GENERATION_MODEL}:generateContent"
@@ -27,14 +27,51 @@ class GenerationError(RuntimeError):
     """Raised when answer generation cannot complete."""
 
 
-def _api_key() -> str:
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise GenerationError("GEMINI_API_KEY is required for generation.")
-    return api_key
+def _ollama_model() -> str | None:
+    """Local Ollama model name when set (e.g. qwen2.5:1.5b); None = Gemini."""
+    return os.getenv("OLLAMA_MODEL") or None
 
 
-def _generate_text(prompt: str) -> str:
+def _ollama_host() -> str:
+    return os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+
+
+def _generate_ollama(prompt: str, temperature: float) -> str:
+    """Call local Ollama /api/generate (non-streaming)."""
+    try:
+        with httpx.Client(timeout=180.0) as client:
+            response = client.post(
+                f"{_ollama_host()}/api/generate",
+                json={
+                    "model": _ollama_model(),
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {"temperature": temperature},
+                },
+            )
+    except Exception as exc:
+        raise GenerationError(f"Ollama transport error: {exc}") from exc
+    if response.status_code >= 400:
+        raise GenerationError(
+            f"Ollama API error {response.status_code}: {response.text[:300]}"
+        )
+    try:
+        text = response.json().get("response", "")
+    except Exception as exc:
+        raise GenerationError(
+            f"Unexpected Ollama response: {response.text[:300]}"
+        ) from exc
+    return (text or "").strip()
+
+
+def generate_text(prompt: str, temperature: float = 0.1) -> str:
+    """Route to Ollama when OLLAMA_MODEL is set, else Gemini."""
+    if _ollama_model():
+        return _generate_ollama(prompt, temperature)
+    return _generate_gemini(prompt, temperature)
+
+
+def _generate_gemini(prompt: str, temperature: float = 0.1) -> str:
     """Call generateContent with a fresh transport; never reuse a client."""
     try:
         with httpx.Client(timeout=120.0) as client:
@@ -46,7 +83,7 @@ def _generate_text(prompt: str) -> str:
                 },
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": 0.1},
+                    "generationConfig": {"temperature": temperature},
                 },
             )
     except GenerationError:
@@ -69,6 +106,18 @@ def _generate_text(prompt: str) -> str:
             f"Unexpected Gemini response: {response.text[:300]}"
         ) from exc
     return (text or "").strip()
+
+
+def _api_key() -> str:
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise GenerationError("GEMINI_API_KEY is required for generation.")
+    return api_key
+
+
+def _generate_text(prompt: str) -> str:
+    """Backward-compat wrapper: routes via generate_text (Ollama or Gemini)."""
+    return generate_text(prompt, temperature=0.1)
 
 
 def _context_block(contexts: list[dict[str, Any]]) -> str:
@@ -96,7 +145,11 @@ def _drop_uncited_sentences(answer: str) -> str:
     return answer.strip() if answer.strip() else "Not found in uploaded papers."
 
 
-def generate_answer(question: str, contexts: list[dict[str, Any]]) -> dict[str, Any]:
+def generate_answer(
+    question: str,
+    contexts: list[dict[str, Any]],
+    strip_uncited: bool = True,
+) -> dict[str, Any]:
     """Generate an answer where factual sentences must carry page citations."""
     if not contexts:
         return {"answer": "Not found in uploaded papers.", "sources": []}
@@ -112,7 +165,9 @@ QUESTION:
 ANSWER:"""
 
     answer = _generate_text(prompt)
-    answer = _drop_uncited_sentences(answer)
+    raw_answer = answer
+    if strip_uncited:
+        answer = _drop_uncited_sentences(answer)
     sources = []
     seen = set()
     for item in contexts:
@@ -127,4 +182,7 @@ ANSWER:"""
                 }
             )
             seen.add(citation)
-    return {"answer": answer, "sources": sources}
+    result: dict[str, Any] = {"answer": answer, "sources": sources}
+    if not strip_uncited:
+        result["answer_raw"] = raw_answer
+    return result
